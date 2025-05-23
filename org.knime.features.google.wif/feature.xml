@@ -6,7 +6,7 @@
       provider-name="KNIME AG, Zurich, Switzerland">
 
    <description>
-      This feature is just a template.
+      This feature provides nodes to do Google Workload Identiy Federation.
    </description>
 
    <copyright>
@@ -728,7 +728,7 @@ propagated with or for interoperation with KNIME.
    </license>
 
    <plugin
-         id="org.knime.ap-repository-template"
+         id="org.knime.google.wif"
          version="0.0.0"/>
 
 </feature>
