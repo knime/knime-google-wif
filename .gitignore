@@ -19,9 +19,13 @@ dist/
 # Package files
 *.jar
 
-# Maven
-target/
-dist/
+# Maven/Java/Eclipse
+**/polyglot.*
+**/target/
+*/bin/
+*.jar
+**/.flattened-pom.xml
+**/CHANGELOG.md
 
 # JetBrains IDE
 .idea/
