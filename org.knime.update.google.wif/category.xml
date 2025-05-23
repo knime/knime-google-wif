@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <feature id="org.knime.features.google.wif" version="0.0.0">
+       <category name="knime-google-wif" />
+   </feature>
+   <feature id="org.knime.features.google.wif" version="0.0.0">
+       <category name="knime-google-wif" />
+   </feature>
+
+   <category-def name="knime-google-wif" label="Build artifacts from knime-google-wif">
+       <description>Build artifacts from knime-google-wif</description>
+   </category-def>
+</site>
