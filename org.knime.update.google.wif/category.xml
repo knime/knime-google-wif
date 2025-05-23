@@ -3,7 +3,7 @@
    <feature id="org.knime.features.google.wif" version="0.0.0">
        <category name="knime-google-wif" />
    </feature>
-   <feature id="org.knime.features.google.wif" version="0.0.0">
+   <feature id="org.knime.features.google.wif.source" version="0.0.0">
        <category name="knime-google-wif" />
    </feature>
 
