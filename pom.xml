@@ -18,6 +18,7 @@
 		<changelist>-SNAPSHOT</changelist>
 		<feature-branch-extension.branchListProperty>git.branch</feature-branch-extension.branchListProperty>
 		<feature-branch-extension.appendArtifactoryProperties>false</feature-branch-extension.appendArtifactoryProperties>
+		<changelog.baseref>fe1200d4447f25f86c53adfd5dc5f12066c95085</changelog.baseref>
 	</properties>
 
 	<modules>
