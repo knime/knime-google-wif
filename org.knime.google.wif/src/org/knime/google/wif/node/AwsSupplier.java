@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -41,13 +42,53 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
+ *
+ * History
+ *   26 May 2025 (Tobias): created
  */
-package org.knime.template;
+package org.knime.google.wif.node;
+
+import java.io.IOException;
+
+import org.knime.cloud.aws.sdkv2.util.AWSCredentialHelper;
+import org.knime.cloud.core.util.port.CloudConnectionInformation;
+
+import com.google.auth.oauth2.AwsSecurityCredentials;
+import com.google.auth.oauth2.AwsSecurityCredentialsSupplier;
+import com.google.auth.oauth2.ExternalAccountSupplierContext;
+
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
 
 /**
- * This is class doesn't do anything.
+ * {@link AwsSecurityCredentialsSupplier} implementation.
  *
- * @author Max Mustermann
+ * @author Tobias Koetter, KNIME GmbH, Konstanz, Germany
  */
-public class Template {
+public class AwsSupplier implements AwsSecurityCredentialsSupplier {
+
+    private static final long serialVersionUID = 1L;
+
+    private final Region m_region;
+
+    private final AwsCredentialsProvider m_credentialProvider;
+
+
+    AwsSupplier(final CloudConnectionInformation connectionInformation) {
+        m_credentialProvider = AWSCredentialHelper.getCredentialProvider(connectionInformation, "KNIME Google WIF");
+        m_region = Region.of(connectionInformation.getHost());
+    }
+
+    @Override
+    public String getRegion(final ExternalAccountSupplierContext context) throws IOException {
+        return m_region.id();
+    }
+
+    @Override
+    public AwsSecurityCredentials getCredentials(final ExternalAccountSupplierContext context) throws IOException {
+        final var awsCredentials = m_credentialProvider.resolveCredentials();
+        return new AwsSecurityCredentials(awsCredentials.accessKeyId(),
+            awsCredentials.secretAccessKey(), null);
+    }
+
 }

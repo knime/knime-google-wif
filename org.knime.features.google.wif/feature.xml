@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
       id="org.knime.features.google.wif"
-      label="KNIME Google Workload Identiy Federation"
+      label="KNIME Google Workload Identity Federation"
       version="5.5.0.qualifier"
       provider-name="KNIME AG, Zurich, Switzerland">
 
    <description>
-      This feature provides nodes to do Google Workload Identiy Federation.
+      This feature provides nodes to do Google Workload Identity Federation.
    </description>
 
    <copyright>
