@@ -18,39 +18,34 @@ try {
     // provide the name of the update site project
     knimetools.defaultTychoBuild('org.knime.update.google.wif')
 
-    // Specifying configurations is optional. If omitted, the default configurations will be used
-    // (see jenkins-pipeline-libraries/vars/workflowTests.groovy).
-    // In almost all cases you can *remove* this defintion.
-    def testConfigurations = [
-        "ubuntu18.04 && python3",
-        "windows && python3"
-    ]
-/*
+
     workflowTests.runTests(
         dependencies: [
-            // A list of repositories required for running workflow tests. All repositories that are required for a minimal
-            // KNIME AP installation are added by default and don't need to be specified here. Currently these are:
-            //
-            // 'knime-tp', 'knime-shared', 'knime-core', 'knime-base', 'knime-workbench', 'knime-expressions',
-            // 'knime-js-core','knime-svg', 'knime-product'
-            //
-            // All features (not plug-ins!) in the specified repositories will be installed.
-            repositories: ['knime-ap-repository-template', 'knime-json', 'knime-python'],
-            // an optional list of additional bundles/plug-ins from the repositories above that must be installed
-            ius: ['org.knime.json.tests']
-        ],
-        // this is optional and defaults to false
-        withAssertions: true,
-        // this is optional and only needs to be provided if non-default configurations are used, see above
-        configurations: testConfigurations
+            repositories: [
+                'knime-aws',
+                'knime-bigdata',
+                'knime-bigdata-externals',
+                'knime-cloud',
+                'knime-credentials-base',
+                'knime-database',
+                'knime-database-proprietary',
+                'knime-database-bigquery',
+                'knime-filehandling',
+                'knime-gateway',
+                'knime-google',
+                'knime-google-wif',
+                'knime-kerberos',
+                'knime-office365',
+                'knime-testing-internal'
+            ],
+            ius: [
+                'org.knime.features.database.community.hub.driver.feature.group'
+            ]
+        ]
     )
-*/
     stage('Sonarqube analysis') {
         env.lastStage = env.STAGE_NAME
-        // Passing the test configuration is optional but must be done when they are used above in the workflow tests.
-        // Therefore you can *remove* the argument in almost all cases.
-        // In case you don't have any workflow tests but still want a Sonarqube analysis, pass an empty list, i.e. [].
-        workflowTests.runSonar(testConfigurations)
+        workflowTests.runSonar()
     }
 } catch (ex) {
     currentBuild.result = 'FAILURE'
