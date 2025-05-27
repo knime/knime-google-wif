@@ -99,10 +99,10 @@ public class GoogleWIFNodeFactory extends ConfigurableNodeFactory<GoogleWIFNodeM
                 "The Google Workload Identity Federation node provides workload identity federation for AWS accounts.")
         .fullDescription(FULL_DESCRIPTION) //
         .modelSettingsClass(GoogleWIFSettings.class)//
-            .addInputPort(FILE_INPUT_NAME, FileSystemPortObject.TYPE,
-                "File System Connection to read the WIF configuration file.", true)//
             .addInputPort(AWS_INPUT_NAME, AmazonConnectionInformationPortObject.TYPE,
                 "AWS Connection Information to be used for WIF.")//
+            .addInputPort(FILE_INPUT_NAME, FileSystemPortObject.TYPE,
+                "File System Connection to read the WIF configuration file.", true)//
             .addOutputPort(GOOGLE_OUTPUT_NAME, CredentialPortObject.TYPE, "Credential (Google) obtained via WIF.")//
         .nodeType(NodeType.Source)//
             .sinceVersion(5, 5, 0)//
