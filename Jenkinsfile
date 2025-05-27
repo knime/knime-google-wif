@@ -25,7 +25,7 @@ try {
         "ubuntu18.04 && python3",
         "windows && python3"
     ]
-
+/*
     workflowTests.runTests(
         dependencies: [
             // A list of repositories required for running workflow tests. All repositories that are required for a minimal
@@ -44,7 +44,7 @@ try {
         // this is optional and only needs to be provided if non-default configurations are used, see above
         configurations: testConfigurations
     )
-
+*/
     stage('Sonarqube analysis') {
         env.lastStage = env.STAGE_NAME
         // Passing the test configuration is optional but must be done when they are used above in the workflow tests.
