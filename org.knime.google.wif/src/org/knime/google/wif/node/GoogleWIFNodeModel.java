@@ -76,10 +76,10 @@ import org.knime.filehandling.core.connections.FSFiles;
 import org.knime.filehandling.core.defaultnodesettings.filechooser.reader.ReadPathAccessor;
 import org.knime.filehandling.core.port.FileSystemPortObject;
 import org.knime.google.api.credential.GoogleCredential;
+import org.knime.google.api.nodes.util.GoogleApiUtil;
 
 import com.google.api.client.json.GenericJson;
 import com.google.api.client.json.JsonObjectParser;
-import com.google.api.client.json.gson.GsonFactory;
 import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AwsCredentials;
 import com.google.auth.oauth2.AwsSecurityCredentialsSupplier;
@@ -141,7 +141,7 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
             }
             final var path = paths.get(0);
             try (InputStream inputStream = FSFiles.newInputStream(path)) {
-                final var parser = new JsonObjectParser(GsonFactory.getDefaultInstance());
+                final var parser = new JsonObjectParser(GoogleApiUtil.getJsonFactory());
                 final var fileContents = parser.parseAndClose(inputStream, StandardCharsets.UTF_8, GenericJson.class);
                 try {
                     final var fromJson = fromJson(fileContents, awsSupplier);
@@ -190,8 +190,7 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
         if (credentialSourceMap.containsKey("environment_id")
                 && ((String)credentialSourceMap.get("environment_id")).startsWith("aws")) {
             return AwsCredentials.newBuilder()
-                ////TK_TODO: Do we need to specify a special one because of proxy settings???
-                //            .setHttpTransportFactory(new DefaultHttpTransportFactory())
+                .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
                 .setAudience(audience).setSubjectTokenType(subjectTokenType).setTokenUrl(tokenUrl)
                 .setTokenInfoUrl(tokenInfoUrl)
                 .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl).setQuotaProjectId(quotaProjectId)
