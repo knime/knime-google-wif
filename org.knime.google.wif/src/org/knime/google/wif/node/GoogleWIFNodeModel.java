@@ -48,6 +48,7 @@
  */
 package org.knime.google.wif.node;
 
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,6 +58,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.knime.base.node.io.filehandling.webui.FileChooserPathAccessor;
 import org.knime.cloud.aws.util.AmazonConnectionInformationPortObject;
 import org.knime.cloud.core.util.port.CloudConnectionInformationPortObjectSpec;
@@ -67,6 +69,7 @@ import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.context.ports.PortsConfiguration;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
+import org.knime.core.node.port.PortType;
 import org.knime.core.webui.node.impl.WebUINodeModel;
 import org.knime.credentials.base.CredentialCache;
 import org.knime.credentials.base.CredentialPortObject;
@@ -80,10 +83,15 @@ import org.knime.google.api.nodes.util.GoogleApiUtil;
 
 import com.google.api.client.json.GenericJson;
 import com.google.api.client.json.JsonObjectParser;
+import com.google.api.client.util.Data;
 import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AwsCredentials;
 import com.google.auth.oauth2.AwsSecurityCredentialsSupplier;
 import com.google.auth.oauth2.ExternalAccountCredentials;
+import com.google.auth.oauth2.IdentityPoolCredentialSource;
+import com.google.auth.oauth2.IdentityPoolCredentials;
+import com.google.auth.oauth2.PluggableAuthCredentialSource;
+import com.google.auth.oauth2.PluggableAuthCredentials;
 
 /**
  * The Databricks Workspace Connector node model.
@@ -95,20 +103,38 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
 
     private UUID m_credentialCacheKey;
 
+    private final int m_fileIdx;
+    private final int m_awsIdx;
+
     /**
      * @param portsConfig The node configuration.
      */
     GoogleWIFNodeModel(final PortsConfiguration portsConfig) {
         super(portsConfig.getInputPorts(), portsConfig.getOutputPorts(), GoogleWIFSettings.class);
+        final PortType[] inputPorts = portsConfig.getInputPorts();
+        if (inputPorts.length == 0) {
+            m_awsIdx = -1;
+            m_fileIdx = -1;
+        } else if (inputPorts.length == 1) {
+            if (AmazonConnectionInformationPortObject.TYPE.equals(inputPorts[0])) {
+                m_fileIdx = -1;
+                m_awsIdx = 0;
+            } else {
+                m_fileIdx = 0;
+                m_awsIdx = -1;
+            }
+        } else {
+            m_fileIdx = 0;
+            m_awsIdx = 1;
+        }
     }
 
     @Override
     protected PortObjectSpec[] configure(final PortObjectSpec[] inSpecs, final GoogleWIFSettings settings)
         throws InvalidSettingsException {
-        final int awsPort = inSpecs.length == 2 ? 1 : 0;
-        if (!(inSpecs[awsPort] instanceof CloudConnectionInformationPortObjectSpec)) {
+        if (m_awsIdx >= 0 && !(inSpecs[m_awsIdx] instanceof CloudConnectionInformationPortObjectSpec)) {
             throw new InvalidSettingsException(
-                "Incompatible input connection. Connect the Fabric Workspace Connector output port.");
+                "Incompatible input connection. Connect the Amazon Authenticator output port.");
         }
 
         return new PortObjectSpec[]{new CredentialPortObjectSpec()};
@@ -117,20 +143,23 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
     @Override
     protected PortObject[] execute(final PortObject[] inObjects, final ExecutionContext exec,
         final GoogleWIFSettings settings) throws Exception {
-        final CloudConnectionInformationPortObjectSpec awsSpec;
         final Optional<FSConnection> portObjectConnection;
-        if (inObjects.length == 2) {
-            final FileSystemPortObject portObject = (FileSystemPortObject)inObjects[0];
+        if (m_fileIdx >= 0) {
+            final FileSystemPortObject portObject = (FileSystemPortObject)inObjects[m_fileIdx];
             portObjectConnection = portObject == null ? Optional.empty() : portObject.getFileSystemConnection();
-            awsSpec = (CloudConnectionInformationPortObjectSpec)((AmazonConnectionInformationPortObject)inObjects[1])
-                .getSpec();
         } else {
             portObjectConnection = Optional.empty();
-            awsSpec = (CloudConnectionInformationPortObjectSpec)((AmazonConnectionInformationPortObject)inObjects[0])
-                .getSpec();
         }
 
-        final var awsSupplier = new AwsSupplier(awsSpec.getConnectionInformation());
+        final Optional<AwsSecurityCredentialsSupplier> awsSupplier;
+        if (m_awsIdx >= 0) {
+            final CloudConnectionInformationPortObjectSpec awsSpec =
+                    (CloudConnectionInformationPortObjectSpec)((AmazonConnectionInformationPortObject)inObjects[m_awsIdx])
+                    .getSpec();
+            awsSupplier = Optional.of(new AwsSupplier(awsSpec.getConnectionInformation()));
+        } else {
+            awsSupplier = Optional.empty();
+        }
 
         final GoogleCredential googleCredential;
         try (ReadPathAccessor accessor = new FileChooserPathAccessor(settings.m_configFile, portObjectConnection)) {
@@ -163,42 +192,106 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
      */
     @SuppressWarnings("unchecked")
     private static ExternalAccountCredentials fromJson(final Map<String, Object> json,
-        final AwsSecurityCredentialsSupplier awsSupplier) throws InvalidSettingsException {
+        final Optional<AwsSecurityCredentialsSupplier> awsSupplier) throws InvalidSettingsException {
+        ObjectUtils.allNotNull(json);
 
-        final var audience = (String)json.get("audience");
-        final var subjectTokenType = (String)json.get("subject_token_type");
-        final var tokenUrl = (String)json.get("token_url");
+        String audience = (String) json.get("audience");
+        String subjectTokenType = (String) json.get("subject_token_type");
+        String tokenUrl = (String) json.get("token_url");
 
-        final var credentialSourceMap = (Map<String, Object>)json.get("credential_source");
+        Map<String, Object> credentialSourceMap = (Map<String, Object>) json.get("credential_source");
 
         // Optional params.
-        final var serviceAccountImpersonationUrl = (String)json.get("service_account_impersonation_url");
-        final var tokenInfoUrl = (String)json.get("token_info_url");
-        final var clientId = (String)json.get("client_id");
-        final var clientSecret = (String)json.get("client_secret");
-        final var quotaProjectId = (String)json.get("quota_project_id");
-        final var universeDomain = (String)json.get("universe_domain");
-        var impersonationOptionsMap = (Map<String, Object>)json.get("service_account_impersonation");
+        String serviceAccountImpersonationUrl =
+            getOptional(json, "service_account_impersonation_url", String.class);
+        String tokenInfoUrl = getOptional(json, "token_info_url", String.class);
+        String clientId = getOptional(json, "client_id", String.class);
+        String clientSecret = getOptional(json, "client_secret", String.class);
+        String quotaProjectId = getOptional(json, "quota_project_id", String.class);
+        String userProject = getOptional(json, "workforce_pool_user_project", String.class);
+        String universeDomain = getOptional(json, "universe_domain", String.class);
+        Map<String, Object> impersonationOptionsMap =
+            getOptional(json, "service_account_impersonation", Map.class);
+
         if (impersonationOptionsMap == null) {
-            impersonationOptionsMap = new HashMap<String, Object>();
+          impersonationOptionsMap = new HashMap<String, Object>();
+        }
+        if (credentialSourceMap == null) {
+            throw new InvalidSettingsException(
+                "Invalid configuration file, could find any credential_source information.");
         }
 
-        if (credentialSourceMap == null ) {
-            throw new InvalidSettingsException("Provided config file is invalid");
-        }
-
-        if (credentialSourceMap.containsKey("environment_id")
-                && ((String)credentialSourceMap.get("environment_id")).startsWith("aws")) {
-            return AwsCredentials.newBuilder()
-                .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
+        if (isAwsCredential(credentialSourceMap)) {
+            return AwsCredentials.newBuilder().setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
                 .setAudience(audience).setSubjectTokenType(subjectTokenType).setTokenUrl(tokenUrl)
-                .setTokenInfoUrl(tokenInfoUrl)
-                .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl).setQuotaProjectId(quotaProjectId)
-                .setClientId(clientId).setClientSecret(clientSecret)
+                .setTokenInfoUrl(tokenInfoUrl).setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+                .setQuotaProjectId(quotaProjectId).setClientId(clientId).setClientSecret(clientSecret)
                 .setServiceAccountImpersonationOptions(impersonationOptionsMap).setUniverseDomain(universeDomain)
-                .setAwsSecurityCredentialsSupplier(awsSupplier).build();
+                .setAwsSecurityCredentialsSupplier(awsSupplier
+                    .orElseThrow(() -> new InvalidSettingsException("AWS Connection Information required as input")))
+                .build();
+        } else if (isPluggableAuthCredential(credentialSourceMap)) {
+          return PluggableAuthCredentials.newBuilder()
+              .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
+              .setAudience(audience)
+              .setSubjectTokenType(subjectTokenType)
+              .setTokenUrl(tokenUrl)
+              .setTokenInfoUrl(tokenInfoUrl)
+              .setCredentialSource(new PluggableAuthCredentialSource(credentialSourceMap))
+              .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+              .setQuotaProjectId(quotaProjectId)
+              .setClientId(clientId)
+              .setClientSecret(clientSecret)
+              .setWorkforcePoolUserProject(userProject)
+              .setServiceAccountImpersonationOptions(impersonationOptionsMap)
+              .setUniverseDomain(universeDomain)
+              .build();
         }
-        throw new InvalidSettingsException("Provided config file is not for AWS");
+        return IdentityPoolCredentials.newBuilder()
+            .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
+            .setAudience(audience)
+            .setSubjectTokenType(subjectTokenType)
+            .setTokenUrl(tokenUrl)
+            .setTokenInfoUrl(tokenInfoUrl)
+            .setCredentialSource(new IdentityPoolCredentialSource(credentialSourceMap))
+            .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+            .setQuotaProjectId(quotaProjectId)
+            .setClientId(clientId)
+            .setClientSecret(clientSecret)
+            .setWorkforcePoolUserProject(userProject)
+            .setServiceAccountImpersonationOptions(impersonationOptionsMap)
+            .setUniverseDomain(universeDomain)
+            .build();
+      }
+
+    /**
+     * Copied from
+     * {@link com.google.auth.oauth2.ExternalAccountCredentials#getOptional()}
+     */
+    private static <T> T getOptional(final Map<String, Object> json, final String fieldName, final Class<T> clazz) {
+      Object value = json.get(fieldName);
+      if (value == null || Data.isNull(value)) {
+        return null;
+      }
+      return clazz.cast(value);
+    }
+
+    /**
+     * Copied from
+     * {@link com.google.auth.oauth2.ExternalAccountCredentials#isPluggableAuthCredential()}
+     */
+    private static boolean isPluggableAuthCredential(final Map<String, Object> credentialSource) {
+      // Pluggable Auth is enabled via a nested executable field in the credential source.
+      return credentialSource.containsKey("executable");
+    }
+
+    /**
+     * Copied from
+     * {@link com.google.auth.oauth2.ExternalAccountCredentials#isAwsCredential()}
+     */
+    private static boolean isAwsCredential(final Map<String, Object> credentialSource) {
+      return credentialSource.containsKey("environment_id")
+          && ((String) credentialSource.get("environment_id")).startsWith("aws");
     }
 
     @Override

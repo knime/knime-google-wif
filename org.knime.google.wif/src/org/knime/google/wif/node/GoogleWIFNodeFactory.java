@@ -85,24 +85,31 @@ public class GoogleWIFNodeFactory extends ConfigurableNodeFactory<GoogleWIFNodeM
     private static final String GOOGLE_OUTPUT_NAME = "Credential (Google)";
 
     private static final String FULL_DESCRIPTION = """
-            The Google Workload Identity Federation (WIF) node provides workload identity federation for AWS accounts.
-            It allows to use the given AWS credential to obtain a Google credential using
-            <a href="https://cloud.google.com/iam/docs/workload-identity-federation">Workload Identity Federation.</a>
-            The node requires as input the Amazon credential that should be used as well as the
+            The Google Workload Identity Federation (WIF) node uses
+            <a href="https://cloud.google.com/iam/docs/workload-identity-federation">Workload Identity Federation</a>
+            to allow external identities <a href="https://cloud.google.com/iam/docs/overview#roles">IAM roles</a> to
+            access Google Cloud resources. The node uses the information from the provided
+            <a href="https://cloud.google.com/iam/docs/workload-download-cred-and-grant-access">configuration file</a>
+            to obtain the Google credential which is returned by the node.
+
+            If you want to convert an AWS credential you need to input the Amazon credential via the dynamic
+            AWS Connection Information input port in addition to the
             <a href="https://cloud.google.com/iam/docs/workload-download-cred-and-grant-access">configuration file.</a>
+            This is the case if the <i>environment_id</i> in the <i>credential_source</i> section of the
+            configuration file starts with aws.
             """;
 
     static final WebUINodeConfiguration CONFIG = WebUINodeConfiguration.builder()//
-            .name("Google Workload Identity Federation (AWS)")//
+            .name("Google Workload Identity Federation")//
             .icon("./googleauthenticator.png")//
             .shortDescription(
                 "The Google Workload Identity Federation node provides workload identity federation for AWS accounts.")
         .fullDescription(FULL_DESCRIPTION) //
         .modelSettingsClass(GoogleWIFSettings.class)//
-            .addInputPort(AWS_INPUT_NAME, AmazonConnectionInformationPortObject.TYPE,
-                "AWS Connection Information to be used for WIF.")//
             .addInputPort(FILE_INPUT_NAME, FileSystemPortObject.TYPE,
                 "File System Connection to read the WIF configuration file.", true)//
+            .addInputPort(AWS_INPUT_NAME, AmazonConnectionInformationPortObject.TYPE,
+                "AWS Connection Information to be used for WIF.", true)//
             .addOutputPort(GOOGLE_OUTPUT_NAME, CredentialPortObject.TYPE, "Credential (Google) obtained via WIF.")//
         .nodeType(NodeType.Source)//
             .sinceVersion(5, 5, 0)//
@@ -122,7 +129,7 @@ public class GoogleWIFNodeFactory extends ConfigurableNodeFactory<GoogleWIFNodeM
     protected Optional<PortsConfigurationBuilder> createPortsConfigBuilder() {
         final PortsConfigurationBuilder b = new PortsConfigurationBuilder();
         b.addOptionalInputPortGroup(FILE_INPUT_NAME, FileSystemPortObject.TYPE);
-        b.addFixedInputPortGroup(AWS_INPUT_NAME, AmazonConnectionInformationPortObject.TYPE);
+        b.addOptionalInputPortGroup(AWS_INPUT_NAME, AmazonConnectionInformationPortObject.TYPE);
         b.addFixedOutputPortGroup(GOOGLE_OUTPUT_NAME, CredentialPortObject.TYPE);
         return Optional.of(b);
     }
