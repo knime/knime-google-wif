@@ -52,8 +52,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.webui.node.dialog.defaultdialog.DefaultNodeSettings;
-import org.knime.core.webui.node.dialog.defaultdialog.setting.fileselection.FileSelection;
-import org.knime.core.webui.node.dialog.defaultdialog.widget.FileReaderWidget;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.file.FileReaderWidget;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.file.FileSelection;
 import org.knime.core.webui.node.dialog.defaultdialog.widget.Widget;
 
 /**
