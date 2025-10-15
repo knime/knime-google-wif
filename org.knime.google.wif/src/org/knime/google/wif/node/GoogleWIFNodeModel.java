@@ -85,6 +85,7 @@ import com.google.api.client.json.GenericJson;
 import com.google.api.client.json.JsonObjectParser;
 import com.google.api.client.util.Data;
 import com.google.auth.http.HttpTransportFactory;
+import com.google.auth.oauth2.AwsCredentialSource;
 import com.google.auth.oauth2.AwsCredentials;
 import com.google.auth.oauth2.AwsSecurityCredentialsSupplier;
 import com.google.auth.oauth2.ExternalAccountCredentials;
@@ -181,6 +182,14 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
             }
         }
 
+        //validate the Google credential if it is valid
+        try {
+            googleCredential.getAccessToken();
+        } catch (Exception e) {
+            throw new InvalidSettingsException("Couldn't create the Google credential: " + e.getMessage(), e);
+        }
+
+
         m_credentialCacheKey = CredentialCache.store(googleCredential);
         return new PortObject[]{
             new CredentialPortObject(new CredentialPortObjectSpec(googleCredential.getType(), m_credentialCacheKey))};
@@ -193,6 +202,9 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
     @SuppressWarnings("unchecked")
     private static ExternalAccountCredentials fromJson(final Map<String, Object> json,
         final Optional<AwsSecurityCredentialsSupplier> awsSupplier) throws InvalidSettingsException {
+        final HttpTransportFactory transportFactory = GoogleApiUtil::getHttpTransport;
+
+        //Copied from com.google.auth.oauth2.ExternalAccountCredentials#fromJson(Map, HttpTransportFactory)}
         ObjectUtils.allNotNull(json);
 
         String audience = (String) json.get("audience");
@@ -222,47 +234,79 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
         }
 
         if (isAwsCredential(credentialSourceMap)) {
-            return AwsCredentials.newBuilder().setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
-                .setAudience(audience).setSubjectTokenType(subjectTokenType).setTokenUrl(tokenUrl)
-                .setTokenInfoUrl(tokenInfoUrl).setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
-                .setQuotaProjectId(quotaProjectId).setClientId(clientId).setClientSecret(clientSecret)
-                .setServiceAccountImpersonationOptions(impersonationOptionsMap).setUniverseDomain(universeDomain)
-                .setAwsSecurityCredentialsSupplier(awsSupplier
-                    .orElseThrow(() -> new InvalidSettingsException("AWS Connection Information required as input")))
-                .build();
+
+            //this is the adapted part to allow passing in an AWS credentials supplier
+            if (awsSupplier.isPresent()) {
+                // Use the provided AWS credentials supplier instead of building one from the JSON.
+                return AwsCredentials.newBuilder()
+                    .setHttpTransportFactory(transportFactory)
+                    .setAudience(audience)
+                    .setSubjectTokenType(subjectTokenType)
+                    .setTokenUrl(tokenUrl)
+                    .setTokenInfoUrl(tokenInfoUrl)
+                    .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+                    .setQuotaProjectId(quotaProjectId)
+                    .setClientId(clientId)
+                    .setClientSecret(clientSecret)
+                    .setServiceAccountImpersonationOptions(impersonationOptionsMap)
+                    .setUniverseDomain(universeDomain)
+                    //this is where we inject our AWS credentials supplier
+                    .setAwsSecurityCredentialsSupplier(awsSupplier.get())
+                    .build();
+            }
+
+            //the rest below is copied from com.google.auth.oauth2.AwsCredentials#fromJson(Map, HttpTransportFactory)
+            else {
+                // Build the AWS credentials supplier from the JSON only e.g. to support imdsv2_session_token_url
+                // that retrieve a session token from the AWS Instance Metadata Service Version 2
+                return AwsCredentials.newBuilder()
+                        .setHttpTransportFactory(transportFactory)
+                        .setAudience(audience)
+                        .setSubjectTokenType(subjectTokenType)
+                        .setTokenUrl(tokenUrl)
+                        .setTokenInfoUrl(tokenInfoUrl)
+                        .setCredentialSource(new AwsCredentialSource(credentialSourceMap))
+                        .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+                        .setQuotaProjectId(quotaProjectId)
+                        .setClientId(clientId)
+                        .setClientSecret(clientSecret)
+                        .setServiceAccountImpersonationOptions(impersonationOptionsMap)
+                        .setUniverseDomain(universeDomain)
+                        .build();
+            }
         } else if (isPluggableAuthCredential(credentialSourceMap)) {
-          return PluggableAuthCredentials.newBuilder()
-              .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
-              .setAudience(audience)
-              .setSubjectTokenType(subjectTokenType)
-              .setTokenUrl(tokenUrl)
-              .setTokenInfoUrl(tokenInfoUrl)
-              .setCredentialSource(new PluggableAuthCredentialSource(credentialSourceMap))
-              .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
-              .setQuotaProjectId(quotaProjectId)
-              .setClientId(clientId)
-              .setClientSecret(clientSecret)
-              .setWorkforcePoolUserProject(userProject)
-              .setServiceAccountImpersonationOptions(impersonationOptionsMap)
-              .setUniverseDomain(universeDomain)
-              .build();
-        }
-        return IdentityPoolCredentials.newBuilder()
-            .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
-            .setAudience(audience)
-            .setSubjectTokenType(subjectTokenType)
-            .setTokenUrl(tokenUrl)
-            .setTokenInfoUrl(tokenInfoUrl)
-            .setCredentialSource(new IdentityPoolCredentialSource(credentialSourceMap))
-            .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
-            .setQuotaProjectId(quotaProjectId)
-            .setClientId(clientId)
-            .setClientSecret(clientSecret)
-            .setWorkforcePoolUserProject(userProject)
-            .setServiceAccountImpersonationOptions(impersonationOptionsMap)
-            .setUniverseDomain(universeDomain)
-            .build();
-      }
+            return PluggableAuthCredentials.newBuilder()
+                    .setHttpTransportFactory(transportFactory)
+                    .setAudience(audience)
+                    .setSubjectTokenType(subjectTokenType)
+                    .setTokenUrl(tokenUrl)
+                    .setTokenInfoUrl(tokenInfoUrl)
+                    .setCredentialSource(new PluggableAuthCredentialSource(credentialSourceMap))
+                    .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+                    .setQuotaProjectId(quotaProjectId)
+                    .setClientId(clientId)
+                    .setClientSecret(clientSecret)
+                    .setWorkforcePoolUserProject(userProject)
+                    .setServiceAccountImpersonationOptions(impersonationOptionsMap)
+                    .setUniverseDomain(universeDomain)
+                    .build();
+              }
+              return IdentityPoolCredentials.newBuilder()
+                  .setHttpTransportFactory(transportFactory)
+                  .setAudience(audience)
+                  .setSubjectTokenType(subjectTokenType)
+                  .setTokenUrl(tokenUrl)
+                  .setTokenInfoUrl(tokenInfoUrl)
+                  .setCredentialSource(new IdentityPoolCredentialSource(credentialSourceMap))
+                  .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
+                  .setQuotaProjectId(quotaProjectId)
+                  .setClientId(clientId)
+                  .setClientSecret(clientSecret)
+                  .setWorkforcePoolUserProject(userProject)
+                  .setServiceAccountImpersonationOptions(impersonationOptionsMap)
+                  .setUniverseDomain(universeDomain)
+                  .build();
+    }
 
     /**
      * Copied from
