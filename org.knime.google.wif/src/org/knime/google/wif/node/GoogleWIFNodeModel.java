@@ -66,6 +66,7 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeLogger;
 import org.knime.core.node.context.ports.PortsConfiguration;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
@@ -88,10 +89,6 @@ import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AwsCredentials;
 import com.google.auth.oauth2.AwsSecurityCredentialsSupplier;
 import com.google.auth.oauth2.ExternalAccountCredentials;
-import com.google.auth.oauth2.IdentityPoolCredentialSource;
-import com.google.auth.oauth2.IdentityPoolCredentials;
-import com.google.auth.oauth2.PluggableAuthCredentialSource;
-import com.google.auth.oauth2.PluggableAuthCredentials;
 
 /**
  * The Databricks Workspace Connector node model.
@@ -100,6 +97,8 @@ import com.google.auth.oauth2.PluggableAuthCredentials;
  */
 @SuppressWarnings("restriction")
 final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
+
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(GoogleWIFNodeModel.class);
 
     private UUID m_credentialCacheKey;
 
@@ -170,16 +169,31 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
             }
             final var path = paths.get(0);
             try (InputStream inputStream = FSFiles.newInputStream(path)) {
-                final var parser = new JsonObjectParser(GoogleApiUtil.getJsonFactory());
-                final var fileContents = parser.parseAndClose(inputStream, StandardCharsets.UTF_8, GenericJson.class);
-                try {
-                    final var fromJson = fromJson(fileContents, awsSupplier);
-                    googleCredential = new GoogleCredential(fromJson);
-                } catch (ClassCastException | IllegalArgumentException e) {
-                    throw new InvalidSettingsException("An invalid input stream was provided.", e);
+                if (awsSupplier.isPresent()) {
+                    LOGGER.debug("Using AWS credentials provided via the input port.");
+                    final var parser = new JsonObjectParser(GoogleApiUtil.getJsonFactory());
+                    final var fileContents = parser.parseAndClose(inputStream,
+                        StandardCharsets.UTF_8, GenericJson.class);
+                    try {
+                        final var fromJson = fromJson(fileContents, awsSupplier.get());
+                        googleCredential = new GoogleCredential(fromJson);
+                    } catch (ClassCastException | IllegalArgumentException e) {
+                        throw new InvalidSettingsException("An invalid input stream was provided.", e);
+                    }
+                } else {
+                    LOGGER.debug("Passing config file to standard method.");
+                    googleCredential = new GoogleCredential(ExternalAccountCredentials.fromStream(inputStream));
                 }
             }
         }
+
+        //validate the Google credential if it is valid
+        try {
+            googleCredential.getAccessToken();
+        } catch (Exception e) {
+            throw new InvalidSettingsException("Couldn't create the Google credential: " + e.getMessage(), e);
+        }
+
 
         m_credentialCacheKey = CredentialCache.store(googleCredential);
         return new PortObject[]{
@@ -192,77 +206,56 @@ final class GoogleWIFNodeModel extends WebUINodeModel<GoogleWIFSettings> {
      */
     @SuppressWarnings("unchecked")
     private static ExternalAccountCredentials fromJson(final Map<String, Object> json,
-        final Optional<AwsSecurityCredentialsSupplier> awsSupplier) throws InvalidSettingsException {
+        final AwsSecurityCredentialsSupplier awsSupplier) throws InvalidSettingsException {
+        final HttpTransportFactory transportFactory = GoogleApiUtil::getHttpTransport;
+
+        //Copied from com.google.auth.oauth2.ExternalAccountCredentials#fromJson(Map, HttpTransportFactory)}
         ObjectUtils.allNotNull(json);
 
-        String audience = (String) json.get("audience");
-        String subjectTokenType = (String) json.get("subject_token_type");
-        String tokenUrl = (String) json.get("token_url");
+        String audience = (String)json.get("audience");
+        String subjectTokenType = (String)json.get("subject_token_type");
+        String tokenUrl = (String)json.get("token_url");
 
-        Map<String, Object> credentialSourceMap = (Map<String, Object>) json.get("credential_source");
+        Map<String, Object> credentialSourceMap = (Map<String, Object>)json.get("credential_source");
 
         // Optional params.
-        String serviceAccountImpersonationUrl =
-            getOptional(json, "service_account_impersonation_url", String.class);
+        String serviceAccountImpersonationUrl = getOptional(json, "service_account_impersonation_url", String.class);
         String tokenInfoUrl = getOptional(json, "token_info_url", String.class);
         String clientId = getOptional(json, "client_id", String.class);
         String clientSecret = getOptional(json, "client_secret", String.class);
         String quotaProjectId = getOptional(json, "quota_project_id", String.class);
-        String userProject = getOptional(json, "workforce_pool_user_project", String.class);
         String universeDomain = getOptional(json, "universe_domain", String.class);
-        Map<String, Object> impersonationOptionsMap =
-            getOptional(json, "service_account_impersonation", Map.class);
+        Map<String, Object> impersonationOptionsMap = getOptional(json, "service_account_impersonation", Map.class);
 
         if (impersonationOptionsMap == null) {
-          impersonationOptionsMap = new HashMap<String, Object>();
+            impersonationOptionsMap = new HashMap<String, Object>();
         }
         if (credentialSourceMap == null) {
             throw new InvalidSettingsException(
-                "Invalid configuration file, could find any credential_source information.");
+                "Invalid configuration file, could not find any credential_source information.");
         }
-
         if (isAwsCredential(credentialSourceMap)) {
-            return AwsCredentials.newBuilder().setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
-                .setAudience(audience).setSubjectTokenType(subjectTokenType).setTokenUrl(tokenUrl)
-                .setTokenInfoUrl(tokenInfoUrl).setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
-                .setQuotaProjectId(quotaProjectId).setClientId(clientId).setClientSecret(clientSecret)
-                .setServiceAccountImpersonationOptions(impersonationOptionsMap).setUniverseDomain(universeDomain)
-                .setAwsSecurityCredentialsSupplier(awsSupplier
-                    .orElseThrow(() -> new InvalidSettingsException("AWS Connection Information required as input")))
+            // Use the provided AWS credentials supplier instead of building one from the JSON.
+            return AwsCredentials.newBuilder() //
+                .setHttpTransportFactory(transportFactory) //
+                .setAudience(audience) //
+                .setSubjectTokenType(subjectTokenType) //
+                .setTokenUrl(tokenUrl) //
+                .setTokenInfoUrl(tokenInfoUrl) //
+                .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl) //
+                .setQuotaProjectId(quotaProjectId) //
+                .setClientId(clientId) //
+                .setClientSecret(clientSecret) //
+                .setServiceAccountImpersonationOptions(impersonationOptionsMap) //
+                .setUniverseDomain(universeDomain) //
+                //this is where we inject our AWS credentials supplier
+                .setAwsSecurityCredentialsSupplier(awsSupplier) //
                 .build();
-        } else if (isPluggableAuthCredential(credentialSourceMap)) {
-          return PluggableAuthCredentials.newBuilder()
-              .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
-              .setAudience(audience)
-              .setSubjectTokenType(subjectTokenType)
-              .setTokenUrl(tokenUrl)
-              .setTokenInfoUrl(tokenInfoUrl)
-              .setCredentialSource(new PluggableAuthCredentialSource(credentialSourceMap))
-              .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
-              .setQuotaProjectId(quotaProjectId)
-              .setClientId(clientId)
-              .setClientSecret(clientSecret)
-              .setWorkforcePoolUserProject(userProject)
-              .setServiceAccountImpersonationOptions(impersonationOptionsMap)
-              .setUniverseDomain(universeDomain)
-              .build();
         }
-        return IdentityPoolCredentials.newBuilder()
-            .setHttpTransportFactory(GoogleApiUtil::getHttpTransport)
-            .setAudience(audience)
-            .setSubjectTokenType(subjectTokenType)
-            .setTokenUrl(tokenUrl)
-            .setTokenInfoUrl(tokenInfoUrl)
-            .setCredentialSource(new IdentityPoolCredentialSource(credentialSourceMap))
-            .setServiceAccountImpersonationUrl(serviceAccountImpersonationUrl)
-            .setQuotaProjectId(quotaProjectId)
-            .setClientId(clientId)
-            .setClientSecret(clientSecret)
-            .setWorkforcePoolUserProject(userProject)
-            .setServiceAccountImpersonationOptions(impersonationOptionsMap)
-            .setUniverseDomain(universeDomain)
-            .build();
-      }
+        throw new InvalidSettingsException(
+            "The provided configuration file does not contain AWS credential_source information which "
+            + "are required to use the Amazon Credential input port.");
+    }
 
     /**
      * Copied from
