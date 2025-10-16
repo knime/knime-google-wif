@@ -36,6 +36,7 @@ try {
                 'knime-google-wif',
                 'knime-kerberos',
                 'knime-office365',
+                'knime-scripting-editor',
                 'knime-testing-internal'
             ],
             ius: [
