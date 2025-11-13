@@ -4,19 +4,19 @@ Bundle-Name: KNIME Google Workload Identity Federation
 Bundle-SymbolicName: org.knime.google.wif;singleton:=true
 Bundle-Version: 5.9.0.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
-Require-Bundle: org.knime.base;bundle-version="[5.5.0,6.0.0)",
- org.knime.base.filehandling;bundle-version="[5.5.0,6.0.0)",
- org.knime.core;bundle-version="[5.5.0,6.0.0)",
- org.knime.core.ui;bundle-version="[5.5.0,6.0.0)",
- org.knime.workbench.repository;bundle-version="[5.5.0,6.0.0)",
- org.knime.google.api;bundle-version="[5.5.0,6.0.0)",
- org.knime.ext.google.sdk;bundle-version="[5.5.0,6.0.0)",
- org.knime.credentials.base;bundle-version="[5.5.0,6.0.0)",
- org.knime.credentials.base.oauth;bundle-version="[5.5.0,6.0.0)",
- org.knime.cloud.core;bundle-version="[5.5.0,6.0.0)",
- org.knime.cloud.aws;bundle-version="[5.5.0,6.0.0)",
- org.knime.cloud.aws.sdkv2;bundle-version="[5.5.0,6.0.0)",
- org.knime.filehandling.core;bundle-version="[5.5.0,6.0.0)",
+Require-Bundle: org.knime.base;bundle-version="[5.9.0,6.0.0)",
+ org.knime.base.filehandling;bundle-version="[5.9.0,6.0.0)",
+ org.knime.core;bundle-version="[5.9.0,6.0.0)",
+ org.knime.core.ui;bundle-version="[5.9.0,6.0.0)",
+ org.knime.workbench.repository;bundle-version="[5.9.0,6.0.0)",
+ org.knime.google.api;bundle-version="[5.9.0,6.0.0)",
+ org.knime.ext.google.sdk;bundle-version="[5.9.0,6.0.0)",
+ org.knime.credentials.base;bundle-version="[5.9.0,6.0.0)",
+ org.knime.credentials.base.oauth;bundle-version="[5.9.0,6.0.0)",
+ org.knime.cloud.core;bundle-version="[5.9.0,6.0.0)",
+ org.knime.cloud.aws;bundle-version="[5.9.0,6.0.0)",
+ org.knime.cloud.aws.sdkv2;bundle-version="[5.9.0,6.0.0)",
+ org.knime.filehandling.core;bundle-version="[5.9.0,6.0.0)",
  org.apache.commons.lang3;bundle-version="[3.14.0,4.0.0)"
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ActivationPolicy: lazy
